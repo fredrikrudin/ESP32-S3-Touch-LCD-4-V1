@@ -68,3 +68,41 @@ Gå till `/scheduler` via webbgränssnittet (kräver inloggning). Här kan du sl
 
 ## 📄 Licens
 Detta projekt är open-source och licensierat under MIT-licensen - se [LICENSE](LICENSE) för detaljer.
+
+##
+Ja, det är absolut Bluetooth (BLE)!
+GATT (Generic Attribute Profile) är just det protokoll som används inuti Bluetooth Low Energy (BLE) för att skicka och ta emot data när två enheter har kopplat upp sig mot varandra.
+Skillnaden ligger bara i hur ESP32:an pratar med enheterna över Bluetooth:
+
+   1. Victron-enheterna använder BLE-annonsering (Passive Scanning): De skriker ut sin data i luften till alla som vill lyssna. ESP32 behöver aldrig "para" eller ansluta till dem, bara avkoda paketen med din bindkey.
+   2. Eco-Worthy (JBD-BMS) använder BLE-anslutning (Active GATT Connection): Batteriet döljer sin detaljerade data tills en annan enhet (som din mobil eller din ESP32) aktivt kopplar upp sig mot dess MAC-adress. När anslutningen är upprättad använder man GATT för att läsa och skriva till batteriets "egenskaper" (Characteristics).
+
+## Hur det fungerar med JBD-BMS i praktiken:
+För att väcka batteriets BMS och be om data över BLE/GATT skickar man ett litet startkommando (en Hex-sekvens) till batteriets skriv-karakteristik, och sedan lyssnar man på svar på läs-karakteristiken.
+Här är de exakta GATT-idnummer (UUID) som nästan alla JBD-BMS använder:
+
+* GATT Service UUID: 0000ff00-0000-1000-8000-00805f9b34fb (Huvudtjänsten för data)
+* GATT Write Characteristic: 0000ff02-0000-1000-8000-00805f9b34fb (Här skickar ESP32 frågan)
+* GATT Read/Notify Characteristic: 0000ff01-0000-1000-8000-00805f9b34fb (Här strömmar batteridata tillbaka)
+
+Ja, det är absolut Bluetooth (BLE)!
+GATT (Generic Attribute Profile) är just det protokoll som används inuti Bluetooth Low Energy (BLE) för att skicka och ta emot data när två enheter har kopplat upp sig mot varandra.
+Skillnaden ligger bara i hur ESP32:an pratar med enheterna över Bluetooth:
+
+   1. Victron-enheterna använder BLE-annonsering (Passive Scanning): De skriker ut sin data i luften till alla som vill lyssna. ESP32 behöver aldrig "para" eller ansluta till dem, bara avkoda paketen med din bindkey.
+   2. Eco-Worthy (JBD-BMS) använder BLE-anslutning (Active GATT Connection): Batteriet döljer sin detaljerade data tills en annan enhet (som din mobil eller din ESP32) aktivt kopplar upp sig mot dess MAC-adress. När anslutningen är upprättad använder man GATT för att läsa och skriva till batteriets "egenskaper" (Characteristics).
+
+## Hur det fungerar med JBD-BMS i praktiken:
+För att väcka batteriets BMS och be om data över BLE/GATT skickar man ett litet startkommando (en Hex-sekvens) till batteriets skriv-karakteristik, och sedan lyssnar man på svar på läs-karakteristiken.
+Här är de exakta GATT-idnummer (UUID) som nästan alla JBD-BMS använder:
+
+* GATT Service UUID: 0000ff00-0000-1000-8000-00805f9b34fb (Huvudtjänsten för data)
+* GATT Write Characteristic: 0000ff02-0000-1000-8000-00805f9b34fb (Här skickar ESP32 frågan)
+* GATT Read/Notify Characteristic: 0000ff01-0000-1000-8000-00805f9b34fb (Här strömmar batteridata tillbaka)
+
+##AI:
+https://share.google/aimode/CUZ8ZNv4NKfIRGgOR
+
+
+
+
