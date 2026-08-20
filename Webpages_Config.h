@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-// --- 3. TIMERSIDA ---
 const char scheduler_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -29,7 +28,6 @@ const char scheduler_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// --- 4. INSTÄLLNINGSSIDA ---
 const char settings_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -54,9 +52,16 @@ const char settings_html[] PROGMEM = R"rawliteral(
     <h2>⚙️ Systemkonfiguration</h2>
     <form action="/save_advanced" method="POST">
         <div class="card">
-            <h3>🌐 Wi-Fi</h3>
+            <h3>🌐 Wi-Fi & System</h3>
             <label>SSID:</label><input type="text" name="ssid" value="%SSID%"><br><br>
-            <label>Lösenord:</label><input type="password" name="pass" value="%PASS%">
+            <label>Lösenord:</label><input type="password" name="pass" value="%PASS%"><br><br>
+            <label>Pollning / Dataintervall:</label>
+            <select name="interval">
+                <option value="1" %INT1%>1 sekund (Hög prestanda)</option>
+                <option value="10" %INT10%>10 sekunder (Balanserad)</option>
+                <option value="30" %INT30%>30 sekunder (Strömspar)</option>
+                <option value="60" %INT60%>60 sekunder (Max strömspar)</option>
+            </select>
         </div>
         <div class="card" style="border-color: #2196F3;">
             <h3>🔒 Webbsäkerhet</h3>
