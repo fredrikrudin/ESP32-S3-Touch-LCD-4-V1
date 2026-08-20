@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-// --- GUI v2 DASHBOARD HTML ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -14,35 +13,60 @@ const char index_html[] PROGMEM = R"rawliteral(
         body { font-family: Arial, sans-serif; background-color: #0B0C0E; color: #fff; margin: 0; padding: 0; text-align: center; }
         .status-bar { background: #000; padding: 10px; display: flex; justify-content: space-between; color: #8A92A6; font-size: 0.9em; border-bottom: 1px solid #181A1F; }
         .container { display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        .capsule { background: #181A1F; border: 1px solid #282C34; border-radius: 20px; padding: 15px; width: 320px; margin: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        .capsule { background: #181A1F; border: 1px solid #282C34; border-radius: 20px; padding: 15px; width: 320px; margin: 10px; }
         .value { font-size: 1.8em; color: #fff; font-weight: bold; margin-top: 5px; }
         .title { font-size: 0.9em; color: #8A92A6; text-transform: uppercase; letter-spacing: 1px; }
-        .nav-btn { display: inline-block; margin-top: 20px; padding: 10px 20px; background: #282C34; color: #fff; text-decoration: none; border-radius: 10px; font-size: 0.9em; }
-        .nav-btn:hover { background: #353b45; }
+        .btn-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; width: 320px; margin: 15px; }
+        .relay-btn { padding: 15px; border-radius: 12px; border: 1px solid #353b45; font-weight: bold; cursor: pointer; color: white; background: #282C34; }
+        .relay-btn.active { background: #4CAF50; border-color: #4CAF50; }
+        .nav-btn { display: inline-block; margin: 5px; padding: 10px 20px; background: #282C34; color: #fff; text-decoration: none; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <div class="status-bar">
-        <div id="web-clock">00:00</div>
-        <div id="web-wifi">Ansluter...</div>
-    </div>
+    <div class="status-bar"><div id="web-clock">00:00</div><div id="web-wifi">Ansluter...</div></div>
     <div class="container">
         <h2>System Dashboard (v2)</h2>
-        <div class="capsule"><div class="title">☀️ MPPT Solcell</div><div id="mppt-val" class="value">0 W</div></div>
-        <div class="capsule"><div class="title">🔌 IP22 Laddare</div><div id="ip22-val" class="value">0 W</div></div>
-        <div class="capsule"><div class="title">🔋 SmartShunt Batteri</div><div id="shunt-val" class="value">0.00 V / 0.0 A</div></div>
-        <div class="capsule"><div class="title">🔋 Eco-Worthy LiFePO4</div><div id="eco-val" class="value">0.00 V</div></div>
-        <a href="/settings" class="nav-btn">⚙️ Systeminställningar</a>
+        <div id="shunt-box" class="capsule"><div class="title">🔋 SmartShunt</div><div id="shunt-val" class="value">0.00 V</div></div>
+        
+        <!-- DYNAMISK INVERTER SIDA/KORT -->
+        <div id="inv-box" class="capsule" style="display:none; border-color: #e67e22;">
+            <div class="title">⚡ Phoenix Inverter</div>
+            <div id="inv-val" class="value">0 W</div>
+            <div id="inv-state" style="color:#e67e22; margin-top:5px; font-weight:bold;">Off</div>
+        </div>
+
+        <h3>🔌 I2C Reläkontroll</h3>
+        <div class="btn-grid">
+            <button id="r0" class="relay-btn" onclick="toggleRelay(0)">Relä 1</button>
+            <button id="r1" class="relay-btn" onclick="toggleRelay(1)">Relä 2</button>
+            <button id="r2" class="relay-btn" onclick="toggleRelay(2)">Relä 3</button>
+            <button id="r3" class="relay-btn" onclick="toggleRelay(3)">Relä 4</button>
+        </div>
+        <br>
+        <a href="/settings" class="nav-btn">⚙️ Inställningar</a>
+        <a href="/scheduler" class="nav-btn">📅 Schemaläggning</a>
     </div>
     <script>
+        function toggleRelay(id) { fetch('/toggle_relay?id=' + id); }
         setInterval(function() {
             fetch('/data').then(res => res.json()).then(data => {
                 document.getElementById('web-clock').innerText = data.clock;
                 document.getElementById('web-wifi').innerText = data.wifi_ssid + " (" + data.wifi_rssi + " dBm)";
-                document.getElementById('mppt-val').innerText = data.mppt_w + " W";
-                document.getElementById('ip22-val').innerText = data.ip22_w + " W";
-                document.getElementById('shunt-val').innerText = data.shunt_v + "V / " + data.shunt_a + "A / " + data.shunt_soc + "%";
-                document.getElementById('eco-val').innerText = data.eco_v + "V / " + data.eco_soc + "% / " + data.eco_t + "°C";
+                document.getElementById('shunt-val').innerText = data.shunt_v + "V / " + data.shunt_a + "A";
+                
+                // Visa/Dölj växelriktaren baserat på om den är aktiv
+                if(data.inv_active) {
+                    document.getElementById('inv-box').style.display = 'block';
+                    document.getElementById('inv-val').innerText = data.inv_w + " W";
+                    document.getElementById('inv-state').innerText = "Status: " + data.inv_state;
+                } else {
+                    document.getElementById('inv-box').style.display = 'none';
+                }
+
+                for(let i=0; i<4; i++) {
+                    let btn = document.getElementById('r'+i);
+                    if((data.relays & (1 << i))) { btn.classList.add('active'); } else { btn.classList.remove('active'); }
+                }
             });
         }, 1000);
     </script>
@@ -50,7 +74,6 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// --- AVANCERAD INSTÄLLNINGS-HTML ---
 const char settings_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -72,42 +95,31 @@ const char settings_html[] PROGMEM = R"rawliteral(
     </style>
 </head>
 <body>
-    <h2>⚙️ Hårdvara & System</h2>
+    <h2>⚙️ Systemkonfiguration</h2>
     <form action="/save_advanced" method="POST">
         <div class="card">
-            <h3>🌐 Nätverksinställningar</h3>
+            <h3>🌐 Nätverk</h3>
             <label>Wi-Fi SSID:</label><input type="text" name="ssid" value="%SSID%"><br><br>
-            <label>Wi-Fi Lösenord:</label><input type="text" name="pass" value="%PASS%"><br><br>
-            <label>Frekvens (sekunder):</label>
-            <select name="interval">
-                <option value="1" %INT1%>1 sekund</option>
-                <option value="2" %INT2%>2 sekunder</option>
-                <option value="5" %INT5%>5 sekunder</option>
-            </select>
+            <label>Wi-Fi Lösenord:</label><input type="text" name="pass" value="%PASS%">
         </div>
+        
+        <!-- PHOENIX INVERTER VAL -->
+        <div class="card" style="border-color: #e67e22;">
+            <div class="row"><h3>⚡ Victron Phoenix Inverter</h3><label class="switch"><input type="checkbox" name="inv_en" value="1" %INV_EN%><span class="slider"></span></label></div>
+            <label>MAC-Adress:</label><input type="text" name="inv_mac" value="%INV_MAC%"><br><br>
+            <label>Bindkey (Hex):</label><input type="text" name="inv_key" value="%INV_KEY%">
+        </div>
+
         <div class="card">
             <div class="row"><h3>🔋 Victron SmartShunt</h3><label class="switch"><input type="checkbox" name="sh_en" value="1" %SH_EN%><span class="slider"></span></label></div>
             <label>MAC-Adress:</label><input type="text" name="sh_mac" value="%SH_MAC%"><br><br>
             <label>Bindkey (Hex):</label><input type="text" name="sh_key" value="%SH_KEY%">
         </div>
-        <div class="card">
-            <div class="row"><h3>☀️ Victron MPPT Solcell</h3><label class="switch"><input type="checkbox" name="mp_en" value="1" %MP_EN%><span class="slider"></span></label></div>
-            <label>MAC-Adress:</label><input type="text" name="mp_mac" value="%MP_MAC%"><br><br>
-            <label>Bindkey (Hex):</label><input type="text" name="mp_key" value="%MP_KEY%">
-        </div>
-        <div class="card">
-            <div class="row"><h3>🔌 Victron IP22 Laddare</h3><label class="switch"><input type="checkbox" name="ip_en" value="1" %IP_EN%><span class="slider"></span></label></div>
-            <label>MAC-Adress:</label><input type="text" name="ip_mac" value="%IP_MAC%"><br><br>
-            <label>Bindkey (Hex):</label><input type="text" name="ip_key" value="%IP_KEY%">
-        </div>
-        <div class="card">
-            <div class="row"><h3>🔋 Eco-Worthy LiFePO4</h3><label class="switch"><input type="checkbox" name="eco_en" value="1" %ECO_EN%><span class="slider"></span></label></div>
-            <label>MAC-Adress:</label><input type="text" name="eco_mac" value="%ECO_MAC%">
-        </div>
-        <div style="max-width:480px; margin:auto;"><button type="submit" class="btn">Spara och Tillämpa</button></div>
+        <div style="max-width:480px; margin:auto;"><button type="submit" class="btn">Spara och Starta om</button></div>
     </form>
 </body>
 </html>
 )rawliteral";
 
+extern const char scheduler_html[] PROGMEM;
 #endif
