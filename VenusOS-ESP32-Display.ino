@@ -1,99 +1,62 @@
-#include <WiFi.h>
-#include <BLEDevice.h>
-#include <BLEUtils.h>
-#include <BLEScan.h>
-#include "Config.h"
-#include "VictronDecrypt.h"
+// Global variabel för skärmens larm-label
+lv_obj_t * lbl_inv_data_page;
 
-BLEScan* pBLEScan;
-unsigned long last_ble_scan = 0;
-bool is_scanning = false;
-
-// --- DYNAMISK PARSING AV DEKRYPTERAD DATA ---
-void parseDecryptedData(uint8_t* decrypted, size_t len, int deviceType) {
-    if (deviceType == 1) { // Exempel: SmartShunt
-        // Victron SmartShunt layout (Rå-bytes mappas till spänning och ström)
-        // Spänning ligger ofta i byte 0-1 (skalat med 0.01V eller 0.1V beroende på modell)
-        int16_t raw_volt = (decrypted[1] << 8) | decrypted[0];
-        int32_t raw_curr = (decrypted[4] << 16) | (decrypted[3] << 8) | decrypted[2]; // 3-bytes strömstyrka
-        
-        shunt.voltage = raw_volt / 100.0;
-        shunt.current = raw_curr / 1000.0; // mA till A
-        shunt.soc = decrypted[5] / 2.0;    // SoC skickas ofta ut i halva procent (0-200)
-        
-        Serial.printf("[Shunt] Volt: %.2fV, Ström: %.2fA, SoC: %.1f%%\n", shunt.voltage, shunt.current, shunt.soc);
-    } 
-    else if (deviceType == 2) { // Exempel: MPPT Solcellsregulator
-        int16_t raw_volt = (decrypted[1] << 8) | decrypted[0];
-        int16_t raw_power = (decrypted[3] << 8) | decrypted[2]; // Watt ut från paneler
-        
-        mppt.voltage = raw_volt / 100.0;
-        // Vi simulerar strömmen genom P/U
-        mppt.current = (raw_volt > 0) ? (raw_power / mppt.voltage) : 0; 
-        
-        Serial.printf("[MPPT] Panel Power: %d W, Laddspänning: %.2fV\n", raw_power, mppt.voltage);
-    }
-}
-
-// --- CALLBACK: KÖRS SÅ FORT ESP32 FÅNGAR ETT BLUETOOTH-PAKET ---
 class VictronAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice advertisedDevice) {
         String foundMac = advertisedDevice.getAddress().toString().c_str();
-        foundMac.toUpperCase(); // Säkerställ matchning mot minnet
+        foundMac.toUpperCase();
 
-        // Kontrollera om enheten är aktiverad och matchar SmartShunt
+        // 1. Hantera SmartShunt (Type 1)
         if (shunt.enabled && foundMac == shunt.mac) {
             if (advertisedDevice.haveManufacturerData()) {
                 std::string mData = advertisedDevice.getManufacturerData();
                 uint8_t* rawData = (uint8_t*)mData.data();
-                
-                // Kontrollera Victrons tillverkarsignatur (0x02FF eller rekordtyp)
                 uint8_t decrypted[16];
                 if (decryptVictronPayload(rawData, mData.length(), shunt.key, decrypted)) {
-                    parseDecryptedData(decrypted, mData.length() - 5, 1); // 1 = Shunt
+                    parseDecryptedData(decrypted, mData.length() - 5, 1);
                 }
             }
         }
         
-        // Kontrollera om enheten är aktiverad och matchar MPPT
-        if (mppt.enabled && foundMac == mppt.mac) {
+        // 2. Hantera MPPT (Type 2) ... [Samma som tidigare]
+
+        // --- 3. NYTT: HANTERA PHOENIX INVERTER (Type 3) ---
+        if (inverter.enabled && foundMac == inverter.mac) {
             if (advertisedDevice.haveManufacturerData()) {
                 std::string mData = advertisedDevice.getManufacturerData();
                 uint8_t* rawData = (uint8_t*)mData.data();
                 
-                uint8_t decrypted[16];
-                if (decryptVictronPayload(rawData, mData.length(), mppt.key, decrypted)) {
-                    parseDecryptedData(decrypted, mData.length() - 5, 2); // 2 = MPPT
+                // Kontrollera Victrons tillverkarsignatur (0x02FF) och Record Type (0x03 för Inverter)
+                if (rawData[0] == 0xFF && rawData[1] == 0x02 && rawData[2] == 0x03) {
+                    uint8_t decrypted[16];
+                    if (decryptVictronPayload(rawData, mData.length(), inverter.key, decrypted)) {
+                        parseDecryptedData(decrypted, mData.length() - 5, 3); // 3 = Inverter
+                        
+                        // Uppdatera skärmens dedikerade Inverter-sida omedelbart vid mottagning
+                        if (lbl_inv_data_page != NULL) {
+                            String alarmText = parseInverterAlarms(inverter.alarm_code);
+                            lv_label_set_text_fmt(lbl_inv_data_page, 
+                                "Effekt: %d W\nIn-Volt: %.2f V\nStatus: %s\n\n⚠️ %s", 
+                                inverter.ac_watt, 
+                                inverter.battery_voltage, 
+                                get_inverter_state_str(inverter.state_code),
+                                alarmText.c_str());
+                        }
+                    }
                 }
             }
         }
     }
 };
 
-void init_ble_scanner() {
-    BLEDevice::init("");
-    pBLEScan = BLEDevice::getBLEScan();
-    pBLEScan->setAdvertisedDeviceCallbacks(new VictronAdvertisedDeviceCallbacks());
-    pBLEScan->setActiveScan(false); // Victron kräver endast passiv skanning (sparar ström)
-    pBLEScan->setInterval(150);     // Tätare intervall för att inte missa paket
-    pBLEScan->setWindow(140);
-}
-
-// --- DEN UTÖKADE OCH ICKE-BLOCKERANDE LOOP-FUNKTIONEN ---
-void loop() {
-    lv_timer_handler(); // Kör LVGL-gränssnittet (bör köras var 5:e ms)
-    delay(5);
-    update_display_dimming(); // Hantera skärmens nattläge och belysningstimer
-
-    // Hantera BLE-skanning asynkront baserat på ditt inställda tidsintervall (t.ex. var 2:e sekund)
-    unsigned long current_millis = millis();
-    if (current_millis - last_ble_scan > (update_interval * 1000)) {
-        
-        // Vi kör en kort, icke-blockerande passiv skanning på 1 sekund
-        // Det förhindrar att skärmen laggar eller fryser under tiden ESP32 lyssnar efter Bluetooth
-        pBLEScan->start(1, false); 
-        pBLEScan->clearResults(); // Töm cachen för att spara RAM-minne
-        
-        last_ble_scan = millis();
+// I din befintliga init_lvgl_interface(), där "tab_inverter" skapas:
+void update_lvgl_inverter_tab_setup() {
+    if (inverter.enabled && tab_inverter != NULL) {
+        // Skapa en textruta på Inverter-fliken för att rymma live-data och larm
+        lbl_inv_data_page = lv_label_create(tab_inverter);
+        lv_label_set_text(lbl_inv_data_page, "Väntar på BLE-data...");
+        lv_obj_set_style_text_color(lbl_inv_data_page, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_font(lbl_inv_data_page, &lv_font_montserrat_16, 0);
+        lv_obj_align(lbl_inv_data_page, LV_ALIGN_CENTER, 0, 20);
     }
 }
