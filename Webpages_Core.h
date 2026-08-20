@@ -3,7 +3,6 @@
 
 #include <Arduino.h>
 
-// --- 1. INLOGGNINGSSIDA ---
 const char login_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -31,7 +30,6 @@ const char login_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// --- 2. DASHBOARD ---
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
